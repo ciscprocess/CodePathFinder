@@ -1,0 +1,409 @@
+﻿using Mono.Cecil;
+using Mono.Cecil.Cil;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.IO;
+using System.Diagnostics;
+
+namespace CodePathFinder
+{
+    class Program
+    {
+        private static readonly string assemblyPathTemplate = @"C:\stash\canonical\DeviceServices\Service\src\DeviceServicesSln\WanderingWiFi.AirWatch.DeviceServices\bin\{0}";
+        private static List<AssemblyDefinition> allAssemblies = new List<AssemblyDefinition>();
+        private static HashSet<string> assemblySet = new HashSet<string>();
+        private static Dictionary<string, IEnumerable<TypeDefinition>> typeImplMap = new Dictionary<string, IEnumerable<TypeDefinition>>();
+        private static Dictionary<string, TypeDefinition> baseTypeMap = new Dictionary<string, TypeDefinition>();
+        private static int cacheHit = 0;
+        private static int cacheMiss = 0;
+        private static bool collectDiagnostics = true;
+
+        private static bool IsAirWatchFile(string path)
+        {
+            var versionInfo = FileVersionInfo.GetVersionInfo(path);
+            if (versionInfo.CompanyName == null)
+            {
+                return false;
+            }
+
+            return (versionInfo.CompanyName.ToLower().Contains("airwatch") ||
+                versionInfo.ProductName.ToLower().Contains("airwatch") ||
+                versionInfo.LegalCopyright.ToLower().Contains("airwatch"));
+        }
+
+        static void Main(string[] args)
+        {
+            var resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory(string.Format(assemblyPathTemplate, ""));
+
+            var asmFiles = Directory.EnumerateFiles(string.Format(assemblyPathTemplate, ""), "*.dll");
+            allAssemblies = asmFiles
+                .Where(x => IsAirWatchFile(x))
+                .Select(x => AssemblyDefinition.ReadAssembly(x, new ReaderParameters() { AssemblyResolver = resolver })).ToList();
+            allAssemblies.ForEach(x => { assemblySet.Add(x.FullName); });
+            // enter assembly path
+            var startAssembly = AssemblyDefinition.ReadAssembly(string.Format(assemblyPathTemplate, "WanderingWiFi.AirWatch.DeviceServices.dll"),
+                new ReaderParameters() { AssemblyResolver = resolver });
+
+            // enter start method
+            Console.Write("Enter the fully-qualified name of the start method.\n? >");
+            var methodName = "WanderingWiFi.AirWatch.DeviceServices.SettingsEndpointHandler.ProcessRequest";//Console.ReadLine();
+            var startMethod = GetMethodFromAssembly(methodName, startAssembly);
+
+            // enter end assembly
+            var endAssembly = AssemblyDefinition.ReadAssembly(
+                @"C:\stash\canonical\DeviceServices\Service\src\DeviceServicesSln\WanderingWiFi.AirWatch.DeviceServices\bin\WanderingWiFi.AirWatch.ProviderImpl.dll",
+                new ReaderParameters() { AssemblyResolver = resolver });
+
+            // enter end method
+            Console.Write("Enter the fully-qualified name of the end method.\n? >");
+            methodName = "WanderingWiFi.AirWatch.ProviderImpl.Device.Profile.DeviceProfileDataHandler._LoadDeviceProfileEntity";//Console.ReadLine();
+            var endMethod = GetMethodFromAssembly(methodName, endAssembly);
+
+            var paths = FindPathsBetweenMethods(startMethod, endMethod);
+
+            var pathNames = paths
+                .OrderBy(x => string.Join("", x))
+                .SelectMany(x => x.Select(y => y)
+                .Concat(new string[] { "-----------------------------------------" }))
+                .ToArray();
+            
+            File.WriteAllLines("results.txt", pathNames);
+
+            Console.WriteLine("Process done. Results written to 'results.txt'. Press a key to continue.");
+            Console.ReadKey();
+        }
+
+        private static MethodDefinition GetMethodFromAssembly(string methodFullName, AssemblyDefinition assembly)
+        {
+            var startMethodNameParts = methodFullName.Split('.');
+            var startMethodType = string.Join(".", startMethodNameParts.Take(startMethodNameParts.Length - 1).ToArray());
+            var startMethodName = startMethodNameParts.Last();
+            return assembly.MainModule.GetType(startMethodType).Methods.First(x => x.Name == startMethodName);
+        }
+
+        private static IEnumerable<string[]> FindPathsBetweenMethods(MethodDefinition start, MethodDefinition end)
+        {
+            var finalPaths = new List<string[]>();
+            var visited = new HashSet<string>();
+            var solutionNodes = new HashSet<string>();
+            var solutionMap = new Dictionary<string, List<List<string>>>();
+            var stack = new Stack<List<MethodDefinition>>();
+            stack.Push(new List<MethodDefinition> { start });
+
+            var iteration = 0;
+            var stopwatch = new Stopwatch();
+            var lastMs = 0L;
+            stopwatch.Start();
+
+            while (stack.Count > 0)
+            {
+                if (collectDiagnostics)
+                {
+                    var tempMs = stopwatch.ElapsedMilliseconds;
+                    iteration++;
+                    if (tempMs - lastMs > 5000)
+                    {
+                        Console.WriteLine("Iterations per second: {0}. Hit: {1}, Miss: {2}",
+                            iteration / ((tempMs - lastMs) / 1000d),
+                            cacheHit,
+                            cacheMiss);
+                        cacheHit = 0;
+                        cacheMiss = 0;
+                        iteration = 0;
+                        lastMs = tempMs;
+                    }
+                }
+
+                var methods = stack.Pop();
+                var currentMethod = methods.Last();
+
+                if (AreMethodsEqual(currentMethod, end))
+                {
+                    finalPaths.Add(methods.Select(x => x.FullName).ToArray());
+                    var partialPath = new List<string>();
+                    for (var i = methods.Count - 1; i >= 0; i--)
+                    {
+                        var partialMethod = methods[i];
+                        partialPath.Insert(0, partialMethod.FullName);
+
+                        if (!solutionMap.ContainsKey(partialMethod.FullName))
+                        {
+                            solutionMap[partialMethod.FullName] = new List<List<string>>();
+                        }
+
+                        solutionMap[partialMethod.FullName].Add(partialPath);
+                        solutionNodes.Add(partialMethod.FullName);
+                    }
+
+                    continue;
+                }
+               
+                if (solutionNodes.Contains(currentMethod.FullName))
+                {
+                    var cachedPaths = solutionMap[currentMethod.FullName];
+
+                    foreach (var cachedPath in cachedPaths)
+                    {
+                        var moddedPath = methods.Select(x => x.FullName).Concat(cachedPath).ToArray();
+
+                        if (!finalPaths.Any(x => x.SequenceEqual(moddedPath)))
+                        {
+                            finalPaths.Add(moddedPath);
+                        }
+                    }
+
+                    continue;
+                }
+
+                if (!visited.Contains(currentMethod.FullName))
+                {
+                    visited.Add(currentMethod.FullName);
+
+                    var neighbors = GetNeighbors(currentMethod);
+                    foreach (var neighbor in neighbors)
+                    {
+                        if (!methods.Any(x => x.FullName == neighbor.FullName))
+                        {
+                            var newPath = methods.Concat(new List<MethodDefinition> { neighbor }).ToList();
+                            stack.Push(newPath);
+                        }
+                    }
+                }
+            }
+
+            stopwatch.Stop();
+            Console.WriteLine("Total time elapsed: {0} seconds.", stopwatch.ElapsedMilliseconds / 1000d);
+
+            return finalPaths;
+        }
+
+        private static IEnumerable<MethodDefinition> GetNeighbors(MethodDefinition method)
+        {
+            if (method == null || (method.Body == null && !method.IsAbstract))
+            {
+                return Enumerable.Empty<MethodDefinition>();
+            }
+
+            if (method.IsAbstract)
+            {
+                var allMethods = new List<MethodDefinition>();
+                var realMethods = ResolveAbstractToImplementation(method);
+                var found = false;
+                foreach (var realMethod in realMethods)
+                {
+                    if (realMethod == null)
+                    {
+                        continue;
+                    }
+
+                    found = true;
+
+                    if (!realMethod.IsAbstract)
+                    {
+                        //var neighs = GetNeighbors(realMethod);
+                        allMethods.Add(realMethod);
+                    }
+                    else
+                    {
+                        //Console.WriteLine("Warning: Abstract impl resolved to abstract impl: \n\t\"{0}\"", method.FullName);
+                    }
+                }
+
+                if (!found)
+                {
+                    Console.WriteLine("Warning: No implementation found for: \n\t\"{0}\"", method.FullName);
+                }
+
+                return allMethods;
+            }
+
+            var calls = method.Body.Instructions.Where(x => x.OpCode == OpCodes.Call ||
+                x.OpCode == OpCodes.Calli ||
+                x.OpCode == OpCodes.Callvirt)
+                .Select(x => ResolveMethodReference(x.Operand))
+                .Where(x => x != null && assemblySet.Contains(x.Module.Assembly.FullName) && 
+                    !x.FullName.Contains("AirWatch.Logging") &&
+                    !x.FullName.Contains("AirWatch.Caching"));
+
+            return calls;
+        }
+
+        private static MethodDefinition ResolveMethodReference(object reference)
+        {
+            if (reference is MethodReference)
+            {
+                return (reference as MethodReference).Resolve();
+            }
+            else if (reference is MethodDefinition)
+            {
+                return (MethodDefinition)reference;
+            }
+            
+            throw new InvalidOperationException("Can't resolve method");
+        }
+
+        private static IEnumerable<MethodDefinition> ResolveAbstractToImplementation(MethodDefinition def)
+        {
+            var absType = def.DeclaringType;
+            if (!absType.IsInterface)
+            {
+                yield return def;
+                yield break;
+            }
+
+            var allTypes = new List<TypeDefinition>();
+            if (!typeImplMap.ContainsKey(absType.FullName))
+            {
+                cacheMiss++;
+                for (int i = 0; i < allAssemblies.Count; i++)
+                {
+                    var types = allAssemblies[i].MainModule.Types;
+                    for (int j = 0; j < types.Count; j++)
+                    {
+                        var type = types[j];
+                        if (type.DoesSpecificTypeImplementInterface(absType) ||
+                            type.IsSubclassOf(absType))
+                        {
+                            allTypes.Add(type);
+                        }
+                    }
+                }
+
+                typeImplMap.Add(absType.FullName, allTypes);
+            }
+            else
+            {
+                cacheHit++;
+                allTypes = (List<TypeDefinition>)typeImplMap[absType.FullName];
+            }
+
+
+            for (int i = 0; i < allTypes.Count; i++)
+            {
+                yield return allTypes[i].Methods.FirstOrDefault(y => DoMethodSignaturesMatch(y, def));
+            }
+        }
+
+        private static bool DoMethodSignaturesMatch(MethodDefinition def1, MethodDefinition def2)
+        {
+            if (def1.Name != def2.Name || 
+                def1.Parameters.Count != def2.Parameters.Count ||
+                def1.ReturnType.FullName != def2.ReturnType.FullName)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < def1.Parameters.Count; i++)
+            {
+                if (def1.Parameters[i].ParameterType.FullName != def2.Parameters[i].ParameterType.FullName)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool AreMethodsEqual(MethodDefinition def1, MethodDefinition def2)
+        {
+            return def1.FullName == def2.FullName;
+            //return def1.Module.MetadataToken == def2.Module.MetadataToken &&
+                //def1.MetadataToken == def2.MetadataToken;
+        }
+
+        public static TypeDefinition GetBaseType(TypeDefinition def)
+        {
+            var fn = def.FullName;
+
+            if (fn == "System.Object" || def.BaseType.FullName == "System.Object")
+            {
+                return null;
+            }
+
+            if (baseTypeMap.ContainsKey(fn))
+            {
+                return baseTypeMap[fn];
+            }
+            else
+            {
+                return baseTypeMap[fn] = def.BaseType?.Resolve();
+            }
+        }
+    }
+
+    static internal class TypeDefinitionExtensions
+    {
+        /// <summary>
+        /// Is childTypeDef a subclass of parentTypeDef. Does not test interface inheritance
+        /// </summary>
+        /// <param name="childTypeDef"></param>
+        /// <param name="parentTypeDef"></param>
+        /// <returns></returns>
+        public static bool IsSubclassOf(this TypeDefinition childTypeDef, TypeDefinition parentTypeDef)
+        {
+            foreach (var baseClass in childTypeDef.EnumerateBaseClasses())
+            {
+                if (baseClass.FullName == parentTypeDef.FullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Does the childType directly inherit from parentInterface. Base
+        /// classes of childType are not tested
+        /// </summary>
+        /// <param name="childTypeDef"></param>
+        /// <param name="parentInterfaceDef"></param>
+        /// <returns></returns>
+        public static bool DoesSpecificTypeImplementInterface(this TypeDefinition childTypeDef, TypeDefinition parentInterfaceDef)
+        {
+            for (int i = 0; i < childTypeDef.Interfaces.Count; i++)
+            {
+                var iface = childTypeDef.Interfaces[i];
+                if (DoesSpecificInterfaceImplementInterface(iface.InterfaceType.Resolve(), parentInterfaceDef))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Does interface iface0 equal or implement interface iface1
+        /// </summary>
+        /// <param name="iface0"></param>
+        /// <param name="iface1"></param>
+        /// <returns></returns>
+        public static bool DoesSpecificInterfaceImplementInterface(TypeDefinition iface0, TypeDefinition iface1)
+        {
+            return iface0.MetadataToken == iface1.MetadataToken && iface0.Module.Mvid == iface1.Module.Mvid;
+        }
+
+        /// <summary>
+        /// Enumerate the current type, it's parent and all the way to the top type
+        /// </summary>
+        /// <param name="klassType"></param>
+        /// <returns></returns>
+        public static IEnumerable<TypeDefinition> EnumerateBaseClasses(this TypeDefinition klassType)
+        {
+            if (klassType.BaseType == null || 
+                klassType.BaseType.FullName == "System.Object")
+            {
+                yield break;
+            }
+
+            for (var typeDefinition = klassType; typeDefinition != null; typeDefinition = Program.GetBaseType(typeDefinition))
+            {
+                yield return typeDefinition;
+            }
+        }
+    }
+}

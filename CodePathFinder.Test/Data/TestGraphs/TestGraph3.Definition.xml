@@ -1,0 +1,92 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+    <graph id="G" edgedefault="directed" parse.nodes="16" parse.edges="70" parse.order="nodesfirst" parse.nodeids="free" parse.edgeids="free">
+        <node id="0" />
+        <node id="1" />
+        <node id="3" />
+        <node id="5" />
+        <node id="7" />
+        <node id="9" />
+        <node id="11" />
+        <node id="13" />
+        <node id="2" />
+        <node id="4" />
+        <node id="6" />
+        <node id="8" />
+        <node id="10" />
+        <node id="12" />
+        <node id="14" />
+        <node id="15" />
+        <edge id="0-&gt;1" source="0" target="1" />
+        <edge id="0-&gt;3" source="0" target="3" />
+        <edge id="0-&gt;5" source="0" target="5" />
+        <edge id="0-&gt;7" source="0" target="7" />
+        <edge id="0-&gt;9" source="0" target="9" />
+        <edge id="0-&gt;11" source="0" target="11" />
+        <edge id="0-&gt;13" source="0" target="13" />
+        <edge id="0-&gt;2" source="0" target="2" />
+        <edge id="0-&gt;4" source="0" target="4" />
+        <edge id="0-&gt;6" source="0" target="6" />
+        <edge id="0-&gt;8" source="0" target="8" />
+        <edge id="0-&gt;10" source="0" target="10" />
+        <edge id="0-&gt;12" source="0" target="12" />
+        <edge id="0-&gt;14" source="0" target="14" />
+        <edge id="0-&gt;15" source="0" target="15" />
+        <edge id="1-&gt;3" source="1" target="3" />
+        <edge id="1-&gt;5" source="1" target="5" />
+        <edge id="1-&gt;7" source="1" target="7" />
+        <edge id="1-&gt;9" source="1" target="9" />
+        <edge id="1-&gt;11" source="1" target="11" />
+        <edge id="1-&gt;13" source="1" target="13" />
+        <edge id="1-&gt;15" source="1" target="15" />
+        <edge id="3-&gt;5" source="3" target="5" />
+        <edge id="3-&gt;7" source="3" target="7" />
+        <edge id="3-&gt;9" source="3" target="9" />
+        <edge id="3-&gt;11" source="3" target="11" />
+        <edge id="3-&gt;13" source="3" target="13" />
+        <edge id="3-&gt;15" source="3" target="15" />
+        <edge id="5-&gt;7" source="5" target="7" />
+        <edge id="5-&gt;9" source="5" target="9" />
+        <edge id="5-&gt;11" source="5" target="11" />
+        <edge id="5-&gt;13" source="5" target="13" />
+        <edge id="5-&gt;15" source="5" target="15" />
+        <edge id="7-&gt;9" source="7" target="9" />
+        <edge id="7-&gt;11" source="7" target="11" />
+        <edge id="7-&gt;13" source="7" target="13" />
+        <edge id="7-&gt;15" source="7" target="15" />
+        <edge id="9-&gt;11" source="9" target="11" />
+        <edge id="9-&gt;13" source="9" target="13" />
+        <edge id="9-&gt;15" source="9" target="15" />
+        <edge id="11-&gt;13" source="11" target="13" />
+        <edge id="11-&gt;15" source="11" target="15" />
+        <edge id="13-&gt;15" source="13" target="15" />
+        <edge id="2-&gt;4" source="2" target="4" />
+        <edge id="2-&gt;6" source="2" target="6" />
+        <edge id="2-&gt;8" source="2" target="8" />
+        <edge id="2-&gt;10" source="2" target="10" />
+        <edge id="2-&gt;12" source="2" target="12" />
+        <edge id="2-&gt;14" source="2" target="14" />
+        <edge id="2-&gt;15" source="2" target="15" />
+        <edge id="4-&gt;6" source="4" target="6" />
+        <edge id="4-&gt;8" source="4" target="8" />
+        <edge id="4-&gt;10" source="4" target="10" />
+        <edge id="4-&gt;12" source="4" target="12" />
+        <edge id="4-&gt;14" source="4" target="14" />
+        <edge id="4-&gt;15" source="4" target="15" />
+        <edge id="6-&gt;8" source="6" target="8" />
+        <edge id="6-&gt;10" source="6" target="10" />
+        <edge id="6-&gt;12" source="6" target="12" />
+        <edge id="6-&gt;14" source="6" target="14" />
+        <edge id="6-&gt;15" source="6" target="15" />
+        <edge id="8-&gt;10" source="8" target="10" />
+        <edge id="8-&gt;12" source="8" target="12" />
+        <edge id="8-&gt;14" source="8" target="14" />
+        <edge id="8-&gt;15" source="8" target="15" />
+        <edge id="10-&gt;12" source="10" target="12" />
+        <edge id="10-&gt;14" source="10" target="14" />
+        <edge id="10-&gt;15" source="10" target="15" />
+        <edge id="12-&gt;14" source="12" target="14" />
+        <edge id="12-&gt;15" source="12" target="15" />
+        <edge id="14-&gt;15" source="14" target="15" />
+    </graph>
+</graphml>
