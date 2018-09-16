@@ -24,9 +24,9 @@
         private readonly int numThreads;
 
         /// <summary>
-        /// The final result of paths found
+        /// The the partially formed paths
         /// </summary>
-        private List<CodePath> finalPaths;
+        private List<CodePath> partialPaths;
 
         /// <summary>
         /// Marks if a method has been visited
@@ -68,7 +68,7 @@
         /// </summary>
         /// <param name="analyzer">The assembly analyzer to use</param>
         /// <param name="numThreads">the number of search threads</param>
-        public DepthFirstCodePathFinder(IAssemblyGraphAnalyzer analyzer, int numThreads = 2)
+        public DepthFirstCodePathFinder(IAssemblyGraphAnalyzer analyzer, int numThreads = 1)
         {
             this.analyzer = analyzer;
             this.numThreads = numThreads;
@@ -82,7 +82,41 @@
         /// <returns>all paths</returns>
         public IList<CodePath> FindPathsBetweenMethods(Method start, Method end, int maxPathLength = -1)
         {
-            this.finalPaths = new List<CodePath>();
+            return EnumeratePathsBetweenMethods(start, end).ToList();
+        }
+
+        public IEnumerable<CodePath> EnumeratePathsBetweenMethods(Method start, Method end, int maxPathLength = -1)
+        {
+            ConstructPartialPaths(start, end).Wait();
+
+            var pathStack = new Stack<CodePath>(this.partialPaths);
+            while (pathStack.Count > 0)
+            {
+                var path = pathStack.Pop();
+                if (path.LastMethod == end)
+                {
+                    yield return path;
+                }
+                else
+                {
+                    var subPaths = pathSolutionMap[path.LastMethod];
+                    foreach (var subPath in subPaths)
+                    {
+                        if (maxPathLength > -1 &&
+                            (path.Length + subPath.Length) > maxPathLength)
+                        {
+                            continue;
+                        }
+
+                        pathStack.Push(path.ConcatNew(subPath));
+                    }
+                }
+            }
+        }
+
+        private async Task ConstructPartialPaths(Method start, Method end)
+        {
+            this.partialPaths = new List<CodePath>();
             this.visited = new ConcurrentHashSet<Method>();
             this.pathSolutionMap = new Dictionary<Method, List<CodePath>>();
             this.solutionMethods = new ConcurrentHashSet<Method>();
@@ -102,66 +136,7 @@
                 tasks[i].ContinueWith(HandleThreadError, TaskContinuationOptions.OnlyOnFaulted);
             }
 
-            Task.WaitAll(tasks);
-
-            for (int i = 0; i < finalPaths.Count; i++)
-            {
-                for (int j = i + 1; j < finalPaths.Count; j++)
-                {
-                    var path1 = finalPaths[i];
-                    var path2 = finalPaths[j];
-                    if (AreCodePathsEqual(path1, path2))
-                    {
-                        finalPaths.RemoveAt(j--);
-                    }
-                }
-            }
-
-            CompleteBacklog();
-
-            return finalPaths
-                .Where(x => maxPathLength == -1 || x.Count() <= maxPathLength)
-                .ToList();
-        }
-
-        private bool AreCodePathsEqual(CodePath path1, CodePath path2)
-        {
-            int count1, count2;
-            if ((count1 = path1.Count()) != (count2 = path2.Count()))
-            {
-                return false;
-            }
-
-            for (int i = 0; i < count2; i++)
-            {
-                var node1 = path1.ElementAt(i);
-                var node2 = path2.ElementAt(i);
-                if (!node1.Equals(node2))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private void CompleteBacklog()
-        {
-            foreach (var path in this.backlog)
-            {
-                if (solutionMethods.Contains(path.LastMethod))
-                {
-                    var cachedPaths = pathSolutionMap[path.LastMethod];
-                    foreach (var cachedPath in cachedPaths)
-                    {
-                        var moddedPath = path.ConcatNew(cachedPath);
-                        if (!this.finalPaths.Contains(moddedPath))
-                        {
-                            finalPaths.Add(moddedPath);
-                        }
-                    }
-                }
-            }
+            await Task.WhenAll(tasks);
         }
 
         private void HandleThreadError(Task failedTask)
@@ -251,26 +226,15 @@
                 // cache all sub-paths to this node for performance
                 if (end == currentMethod)
                 {
-                    finalPaths.Add(path);
+                    partialPaths.Add(path);
                     AddPathToSolutionMap(path);
                     continue;
                 }
 
                 if (solutionMethods.Contains(currentMethod))
                 {
-                    var cachedPaths = pathSolutionMap[currentMethod];
-                    var addedPaths = new List<CodePath>();
-                    foreach (var cachedPath in cachedPaths)
-                    {
-                        var moddedPath = path.ConcatNew(cachedPath);
-                        finalPaths.Add(moddedPath);
-                        addedPaths.Add(moddedPath);
-                    }
-
-                    foreach (var added in addedPaths)
-                    {
-                        AddPathToSolutionMap(added, path.Length);
-                    }
+                    partialPaths.Add(path);
+                    AddPathToSolutionMap(path);
                 }
 
                 if (visited.Contains(currentMethod))

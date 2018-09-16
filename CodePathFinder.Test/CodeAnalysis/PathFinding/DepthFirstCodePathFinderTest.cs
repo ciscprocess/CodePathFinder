@@ -26,6 +26,7 @@
             var actualList = sut.FindPathsBetweenMethods(start, end);
 
             // assert 
+            Assert.Equal(expectedList.Count, actualList.Count);
 
             foreach (var path in actualList)
             {

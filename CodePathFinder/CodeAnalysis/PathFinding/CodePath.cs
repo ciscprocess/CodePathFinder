@@ -4,6 +4,7 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.Text;
+    using System.Linq;
 
     /// <summary>
     /// A versioned linked-list implementation of a method call path
@@ -275,10 +276,16 @@
         public override string ToString()
         {
             var builder = new StringBuilder();
-
+            var index = 0;
             foreach (var method in this)
             {
-                builder.AppendLine(method.ToString());
+                if (index > 10000)
+                {
+                    Console.WriteLine("hitler was a poop");
+                }
+
+                builder.AppendLine(method.FullName);
+                index++;
             }
 
             return builder.ToString();
