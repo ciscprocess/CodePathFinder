@@ -1,15 +1,13 @@
 ﻿namespace CodePathFinder.CodeAnalysis.PathFinding
 {
-    using ConcurrentCollections;
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Parallel DFS based explore algorithm for finding code paths
+    /// Single-threaded DFS based explore algorithm for finding code paths
     /// </summary>
     public class DepthFirstCodePathFinder : ICodePathFinder
     {
@@ -19,11 +17,6 @@
         private readonly IAssemblyGraphAnalyzer analyzer;
 
         /// <summary>
-        /// The number of threads to run
-        /// </summary>
-        private readonly int numThreads;
-
-        /// <summary>
         /// The the partially formed paths
         /// </summary>
         private List<CodePath> partialPaths;
@@ -31,7 +24,7 @@
         /// <summary>
         /// Marks if a method has been visited
         /// </summary>
-        private ConcurrentHashSet<Method> visited;
+        private HashSet<Method> visited;
 
         /// <summary>
         /// If a method ultimately has one or more paths to the solution method,
@@ -43,35 +36,23 @@
         /// <summary>
         /// Like <see cref="pathSolutionMap" /> but only a set (only the keys)
         /// </summary>
-        private ConcurrentHashSet<Method> solutionMethods;
+        private HashSet<Method> solutionMethods;
 
         /// <summary>
         /// Specifies which methods have had all their children explored and can 
         /// be considered "completed"
         /// </summary>
-        private ConcurrentHashSet<Method> completedMethods;
+        private HashSet<Method> completedMethods;
 
-        /// <summary>
-        /// Maps the completion progress (i.e. how many of its children have been properly explored)
-        /// of a method
-        /// </summary>
-        private ConcurrentDictionary<Method, MethodCompletionRing> nodeCompletionMap;
-
-        /// <summary>
-        /// If a method is marked as visited, but not "complete", it is added to the backlog
-        /// to be processed later
-        /// </summary>
-        private ConcurrentBag<CodePath> backlog;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DepthFirstCodePathFinder" /> class
         /// </summary>
         /// <param name="analyzer">The assembly analyzer to use</param>
         /// <param name="numThreads">the number of search threads</param>
-        public DepthFirstCodePathFinder(IAssemblyGraphAnalyzer analyzer, int numThreads = 1)
+        public DepthFirstCodePathFinder(IAssemblyGraphAnalyzer analyzer)
         {
             this.analyzer = analyzer;
-            this.numThreads = numThreads;
         }
 
         /// <summary>
@@ -79,22 +60,63 @@
         /// </summary>
         /// <param name="start">method to start from</param>
         /// <param name="end">goal method</param>
+        /// <param name="maxPathLength">the upper limit of path size; exclude paths longer than this</param>
         /// <returns>all paths</returns>
-        public IList<CodePath> FindPathsBetweenMethods(Method start, Method end, int maxPathLength = -1)
+        public async Task<IList<CodePath>> FindPathsBetweenMethods(Method start, 
+            Method end,
+            CancellationToken cancellationToken,
+            int maxPathLength = -1)
         {
-            return EnumeratePathsBetweenMethods(start, end).ToList();
+            await ConstructPartialPaths(start, end, cancellationToken);
+            return ConstructFullPaths(start, end, cancellationToken, maxPathLength).ToList();
         }
 
-        public IEnumerable<CodePath> EnumeratePathsBetweenMethods(Method start, Method end, int maxPathLength = -1)
+        /// <summary>
+        /// Return an iterator that allows stepping through the results of
+        /// finding all paths between two methods
+        /// </summary>
+        /// <param name="start">method to start from</param>
+        /// <param name="end">goal method</param>
+        /// <param name="maxPathLength">the upper limit of path size; exclude paths longer than this</param>
+        /// <returns></returns>
+        public async Task<IEnumerable<CodePath>> EnumeratePathsBetweenMethods(Method start, 
+            Method end,
+            CancellationToken cancellationToken,
+            int maxPathLength = -1)
         {
-            ConstructPartialPaths(start, end).Wait();
+            await ConstructPartialPaths(start, end, cancellationToken);
+            return ConstructFullPaths(start, end, cancellationToken, maxPathLength);
+        }
 
+        /// <summary>
+        /// Gets an internal enumerator for and completes the final pahts
+        /// </summary>
+        /// <param name="start">method to start from</param>
+        /// <param name="end">goal method</param>
+        /// <param name="maxPathLength">the upper limit of path size; exclude paths longer than this</param>
+        /// <returns>enumerator/generator for paths</returns>
+        private IEnumerable<CodePath> ConstructFullPaths(Method start, 
+            Method end, 
+            CancellationToken token, 
+            int maxPathLength = -1)
+        {
             var pathStack = new Stack<CodePath>(this.partialPaths);
             while (pathStack.Count > 0)
             {
+                if (token.IsCancellationRequested)
+                {
+                    yield break;
+                }
+
                 var path = pathStack.Pop();
                 if (path.LastMethod == end)
                 {
+                    if (maxPathLength > -1 && 
+                        path.Length > maxPathLength)
+                    {
+                        continue;
+                    }
+
                     yield return path;
                 }
                 else
@@ -114,40 +136,43 @@
             }
         }
 
-        private async Task ConstructPartialPaths(Method start, Method end)
+        /// <summary>
+        /// Constructs the partial paths which forms the sub-graph of solution nodes
+        /// </summary>
+        /// <param name="start">starting method</param>
+        /// <param name="end">ending method</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        /// <returns>void Task</returns>
+        private async Task ConstructPartialPaths(Method start, 
+            Method end,
+            CancellationToken cancellationToken)
         {
             this.partialPaths = new List<CodePath>();
-            this.visited = new ConcurrentHashSet<Method>();
+            this.visited = new HashSet<Method>();
             this.pathSolutionMap = new Dictionary<Method, List<CodePath>>();
-            this.solutionMethods = new ConcurrentHashSet<Method>();
-            this.nodeCompletionMap = new ConcurrentDictionary<Method, MethodCompletionRing>();
-            this.completedMethods = new ConcurrentHashSet<Method>();
-            this.backlog = new ConcurrentBag<CodePath>();
+            this.solutionMethods = new HashSet<Method>();
+            this.completedMethods = new HashSet<Method>();
 
-            var proctor = new StackProctor(this.numThreads);
+            // left for potential future multi-threading support
+            var proctor = new StackProctor(1);
             var stack = proctor.GetStack(0);
             stack.Push(CodePath.FromSingleMethod(start));
 
-            Func<int, Action> curryDatShit = i => () => { RunSearchThread(end, proctor, i); };
-            var tasks = new Task[this.numThreads];
-            for (var i = 0; i < this.numThreads; i++)
-            {
-                tasks[i] = Task.Run(curryDatShit(i));
-                tasks[i].ContinueWith(HandleThreadError, TaskContinuationOptions.OnlyOnFaulted);
-            }
-
-            await Task.WhenAll(tasks);
+            await Task.Run(() => RunSearchThread(end, proctor, 0, cancellationToken));
         }
 
-        private void HandleThreadError(Task failedTask)
-        {
-            if (failedTask.IsFaulted && failedTask.Exception != null)
-            {
-                Console.WriteLine("Exception: {0}", failedTask.Exception.ToString());
-            }
-        }
-
-        private void RunSearchThread(Method end, StackProctor proctor, int threadId)
+        /// <summary>
+        /// Runs a search thread for parallel DFS.
+        /// (here for potential multi-threading support in the future)
+        /// </summary>
+        /// <param name="end">goal method</param>
+        /// <param name="proctor">the stack "proctor" for all threads</param>
+        /// <param name="threadId">the ID for this thread (for use with proctor)</param>
+        /// <param name="cancellationToken">the cancellation token</param>
+        private void RunSearchThread(Method end, 
+            StackProctor proctor, 
+            int threadId,
+            CancellationToken cancellationToken)
         {
             var stack = proctor.GetStack(threadId);
             proctor.SetStackWaiting(threadId);
@@ -166,7 +191,16 @@
                 while (stack.Count != 0)
                 {
                     proctor.SetStackRunning(threadId);
-                    DepthFirstSearch(end, stack);
+                    DepthFirstSearch(end, stack, cancellationToken);
+
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        Console.WriteLine("Thread with ID: {0} has had its operation cancelled. Terminating.",
+                            threadId);
+
+                        return;
+                    }
+
                     proctor.SetStackWaiting(threadId);
                     foreach (var workItem in proctor.PullWork())
                     {
@@ -181,10 +215,78 @@
             Console.WriteLine("Terminating thread with ID: {0}", threadId);
         }
 
-        private void AddPathToSolutionMap(CodePath path, int maxTrim = -1)
+        /// <summary>
+        /// Runs a partial depth-first search on the method space
+        /// </summary>
+        /// <param name="end">goal method</param>
+        /// <param name="stack">stack to use -- should be pre-seeded</param>
+        /// <param name="cancellationToken">cancellation token</param>
+        private void DepthFirstSearch(Method end, 
+            Stack<CodePath> stack,
+            CancellationToken cancellationToken)
+        {
+            while (stack.Count > 0)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var path = stack.Pop();
+                var currentMethod = path.LastMethod;
+
+                // we have found the goal method!!
+                // record the path we took to this point and
+                // cache all sub-paths to this node for performance
+                if (end == currentMethod)
+                {
+                    partialPaths.Add(path);
+                    AddPathToSolutionMap(path);
+                    continue;
+                }
+
+                // we have reached a method that leads to
+                // the goal method. record the path to
+                // this point and then cache all subpaths
+                if (solutionMethods.Contains(currentMethod))
+                {
+                    partialPaths.Add(path);
+                    AddPathToSolutionMap(path);
+                    continue;
+                }
+
+                if (visited.Contains(currentMethod))
+                {
+                    continue;
+                }
+
+                var neighbors = this.analyzer.GetMethodNeighbors(currentMethod);
+
+                foreach (var neighbor in neighbors)
+                {
+                    neighbor.Caller = currentMethod;
+
+                    // check to prevent cycles
+                    if (!path.Any(x => x == neighbor))
+                    {
+                        stack.Push(path.AddLastNew(neighbor));
+                    }
+                }
+
+                visited.Add(currentMethod);
+            }
+        }
+
+        /// <summary>
+        /// The <see cref="path" /> parameter must end in either a goal method,
+        /// or a known intermediate method. For each subsequence ending in the same
+        /// method, add the beginning node to known solution nodes
+        /// </summary>
+        /// <param name="path">the path, and whose subpaths, to cache</param>
+        private void AddPathToSolutionMap(CodePath path)
         {
             Method method = null;
-            foreach (var subPath in path.GetSubPaths(maxTrim))
+            foreach (var subPath in path.GetSubPaths())
             {
                 if (method != null)
                 {
@@ -201,76 +303,6 @@
                 }
 
                 method = subPath.FirstMethod;
-            }
-        }
-
-        private void DepthFirstSearch(Method end, Stack<CodePath> stack)
-        {
-            while (stack.Count > 0)
-            {
-                var path = stack.Pop();
-                var currentMethod = path.LastMethod;
-
-                if (currentMethod.Caller != null)
-                {
-                    var map = this.nodeCompletionMap[currentMethod.Caller];
-                    if (map.Set(currentMethod.CalleeIndex))
-                    {
-                        this.completedMethods.Add(currentMethod.Caller);
-                        visited.Add(currentMethod.Caller);
-                    }
-                }
-
-                // we have found the goal method!!
-                // record the path we took to this point and
-                // cache all sub-paths to this node for performance
-                if (end == currentMethod)
-                {
-                    partialPaths.Add(path);
-                    AddPathToSolutionMap(path);
-                    continue;
-                }
-
-                if (solutionMethods.Contains(currentMethod))
-                {
-                    partialPaths.Add(path);
-                    AddPathToSolutionMap(path);
-                }
-
-                if (visited.Contains(currentMethod))
-                {
-                    //if (!this.nodeCompletionMap.ContainsKey(currentMethod))
-                    //{
-                    //    var ohBully = 1;
-                    //}
-
-                    //if (!this.completedMethods.Contains(currentMethod) && 
-                    //    !this.nodeCompletionMap[currentMethod].IsComplete)
-                    //{
-                    //    this.backlog.Add(path);
-                    //}
-
-                    continue;
-                }
-
-                var neighbors = this.analyzer.GetMethodNeighbors(currentMethod);
-
-                this.nodeCompletionMap.GetOrAdd(currentMethod,
-                    new MethodCompletionRing(currentMethod, neighbors.Count));
-
-                var index = 0;
-                foreach (var neighbor in neighbors)
-                {
-                    neighbor.CalleeIndex = index;
-                    neighbor.Caller = currentMethod;
-
-                    // check to prevent cycles
-                    if (!path.Any(x => x == neighbor))
-                    {
-                        stack.Push(path.AddLastNew(neighbor));
-                        index++;
-                    }
-                }
             }
         }
     }

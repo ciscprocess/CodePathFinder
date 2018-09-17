@@ -11,6 +11,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -22,12 +23,28 @@ namespace CodePathFinder.VisualUtility
         /// Default path to domain assemblies
         /// </summary>
         private const string DefaultAsmPath =
-            @"C:\Windows\Microsoft.NET\assembly\GAC_64\System.Web\v4.0_4.0.0.0__b03f5f7f11d50a3a";
+            @"C:\Users\Nathan\Desktop\bin";
 
         /// <summary>
         /// Default "include" options when loading assemblies
         /// </summary>
-        private AssemblyMetadataOption[] options = new AssemblyMetadataOption[0];
+        private AssemblyMetadataOption[] options = new AssemblyMetadataOption[2]
+            {
+                new AssemblyMetadataOption()
+                {
+                    AttributeType = AssemblyMetadataOption.AssemblyMetadataAttribute.ProductName,
+                    Exclude = false,
+                    IsRegex = true,
+                    Value = ".*airwatch.*"
+                },
+                new AssemblyMetadataOption()
+                {
+                    AttributeType = AssemblyMetadataOption.AssemblyMetadataAttribute.LegalCopyright,
+                    Exclude = false,
+                    IsRegex = true,
+                    Value = ".*airwatch.*"
+                }
+            };
 
         private Method start = null;
         private Method end = null;
@@ -56,15 +73,8 @@ namespace CodePathFinder.VisualUtility
 
         private void ButtonFindPaths_Click(object sender, EventArgs e)
         {
-            var location = this.textAsmLocation.Text;
-            var assemblyLoader = new MonoCecilAssemblyLoader(location);
-            var assemblies = assemblyLoader.LoadDomainAssemblies(options);
-            var asmGraphAnalyzer = new MonoCecilAssemblyGraphAnalyzer(assemblies, new TypeDefinitionUtility());
-            var pathFinder = new DepthFirstCodePathFinder(asmGraphAnalyzer, 1);
-            var allPaths = pathFinder.FindPathsBetweenMethods(start, end);
-
-            var viewer = new ResultsViewerLanding(allPaths, start, end);
-            viewer.Show();
+            var finder = new StartSearchPage(this.textAsmLocation.Text, options, start, end);
+            finder.ShowDialog();
         }
 
         private void buttonLoadAssemblies_Click(object sender, EventArgs e)

@@ -6,6 +6,8 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
     using System.Xml.Serialization;
     using TestGraphImpl;
     using Xunit;
@@ -14,16 +16,17 @@
     {
         [Theory]
         [MemberData(nameof(TestData))]
-        public void FindPathsBetweenMethods_FindsAllPaths(IAssemblyGraphAnalyzer graphAnalyzer, 
+        public async Task FindPathsBetweenMethods_FindsAllPaths(IAssemblyGraphAnalyzer graphAnalyzer, 
             Method start, 
             Method end,
             IList<CodePath> expectedList)
         {
             // arrange
-            var sut = new DepthFirstCodePathFinder(graphAnalyzer, 1);
+            var sut = new DepthFirstCodePathFinder(graphAnalyzer);
+            var cts = new CancellationTokenSource();
 
             // act
-            var actualList = sut.FindPathsBetweenMethods(start, end);
+            var actualList = await sut.FindPathsBetweenMethods(start, end, cts.Token);
 
             // assert 
             Assert.Equal(expectedList.Count, actualList.Count);
@@ -60,6 +63,12 @@
 
                 // test graph set 4
                 foreach (var item in ReadGraphParameters("TestGraph4"))
+                {
+                    yield return item;
+                }
+
+                // test graph set 5
+                foreach (var item in ReadGraphParameters("TestGraph5"))
                 {
                     yield return item;
                 }

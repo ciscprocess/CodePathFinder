@@ -1,6 +1,8 @@
 ﻿namespace CodePathFinder.CodeAnalysis.PathFinding
 {
     using System.Collections.Generic;
+    using System.Threading;
+    using System.Threading.Tasks;
 
     /// <summary>
     /// Specifies contract for finding a code path between methods
@@ -14,6 +16,9 @@
         /// <param name="end">the ending method</param>
         /// <param name="maxPathLength">the max length of all paths to find</param>
         /// <returns>all code paths</returns>
-        IList<CodePath> FindPathsBetweenMethods(Method start, Method end, int maxPathLength = -1);
+        Task<IList<CodePath>> FindPathsBetweenMethods(Method start, 
+            Method end, 
+            CancellationToken cancellationToken,
+            int maxPathLength = -1);
     }
 }

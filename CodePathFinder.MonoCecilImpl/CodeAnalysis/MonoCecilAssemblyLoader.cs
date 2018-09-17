@@ -185,13 +185,17 @@
                         throw new InvalidOperationException("Invalid filter type specified.");
                 }
 
-                if (!(isMatch ^ option.Exclude))
+                if (option.Exclude && isMatch)
                 {
                     return false;
                 }
+                else if (isMatch)
+                {
+                    return true;
+                }
             }
 
-            return true;
+            return false;
         }
 
         private bool DoesMatch(string value, AssemblyMetadataOption option)

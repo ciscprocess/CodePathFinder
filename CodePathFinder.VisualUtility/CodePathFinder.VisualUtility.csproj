@@ -131,6 +131,12 @@
     <Compile Include="SetAssemblyLoadOptions.Designer.cs">
       <DependentUpon>SetAssemblyLoadOptions.cs</DependentUpon>
     </Compile>
+    <Compile Include="StartSearchPage.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="StartSearchPage.Designer.cs">
+      <DependentUpon>StartSearchPage.cs</DependentUpon>
+    </Compile>
     <EmbeddedResource Include="AddAssemblyLoadOption.resx">
       <DependentUpon>AddAssemblyLoadOption.cs</DependentUpon>
     </EmbeddedResource>
@@ -161,6 +167,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="SetAssemblyLoadOptions.resx">
       <DependentUpon>SetAssemblyLoadOptions.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="StartSearchPage.resx">
+      <DependentUpon>StartSearchPage.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">

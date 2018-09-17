@@ -5,9 +5,11 @@
     using MonoCecilImpl;
     using MonoCecilImpl.CodeAnalysis;
     using MonoCecilImpl.Utility;
+    using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Threading;
 
     /// <summary>
     /// Holds the entry point for console Code Path Finder
@@ -51,9 +53,12 @@
                 .First();
 
             var asmGraphAnalyzer = new MonoCecilAssemblyGraphAnalyzer(assemblies, new TypeDefinitionUtility());
-            var pathFinder = new DepthFirstCodePathFinder(asmGraphAnalyzer, 1);
-            var allPaths = pathFinder.EnumeratePathsBetweenMethods(startMethod, endMethod, 20);
-            var batchSize = 1000;
+            var pathFinder = new DepthFirstCodePathFinder(asmGraphAnalyzer);
+            var allPaths = pathFinder.EnumeratePathsBetweenMethods(startMethod, 
+                endMethod, 
+                default(CancellationToken)).Result;
+
+            var batchSize = 10000;
             using (var fs = new FileStream(@"D:\results.txt", FileMode.Create, FileAccess.ReadWrite))
             using (var writer = new StreamWriter(fs))
             {
@@ -78,6 +83,8 @@
                 {
                     writer.WriteLine(printPath);
                 }
+
+                Console.ReadKey();
             }
         }
     }

@@ -4,19 +4,16 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.Text;
-    using System.Linq;
 
     /// <summary>
     /// A versioned linked-list implementation of a method call path
     /// </summary>
-    public class CodePath : IEnumerable<Method>, ICloneable, IComparable<CodePath>
+    public class CodePath : IEnumerable<Method>, IComparable<CodePath>
     {
         /// <summary>
         /// Tree path for nodes
         /// </summary>
         private Dictionary<ulong, int> treePath;
-
-        private HashSet<int> hashCodeEqualsSet;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CodePath" /> class
@@ -24,7 +21,6 @@
         public CodePath()
         {
             this.treePath = new Dictionary<ulong, int>();
-            this.hashCodeEqualsSet = new HashSet<int>();
         }
 
         /// <summary>
@@ -35,24 +31,12 @@
         /// <summary>
         /// First method in the list
         /// </summary>
-        public Method FirstMethod
-        {
-            get
-            {
-                return FirstNode.Method;
-            }
-        }
+        public Method FirstMethod => FirstNode.Method;
 
         /// <summary>
         /// Last method in the list
         /// </summary>
-        public Method LastMethod
-        {
-            get
-            {
-                return LastNode.Method;
-            }
-        }
+        public Method LastMethod => LastNode.Method;
 
         /// <summary>
         /// First node in the code path
@@ -135,6 +119,7 @@
             }
 
             newPath.treePath[this.LastNode.NodeId] = version;
+
             newPath.LastNode = other.LastNode;
             newPath.Length = this.Length + other.Length;
             return newPath;
@@ -187,34 +172,6 @@
         IEnumerator IEnumerable.GetEnumerator()
         {
             return AllNodes.GetEnumerator();
-        }
-
-        /// <summary>
-        /// Clones this <see cref="CodePath" />
-        /// </summary>
-        /// <returns>the cloned object</returns>
-        public object Clone()
-        {
-            var node = (MethodNode)FirstNode.Clone();
-            var firstNode = node;
-            var lastNode = firstNode;
-            while (node != null)
-            {
-                var nextNode = this.GetNextNode(node);
-                if (nextNode != null)
-                {
-                    node.AddNextNode((MethodNode)nextNode.Clone());
-                }
-
-                lastNode = node;
-                node = nextNode;
-            }
-
-            return new CodePath()
-            {
-                FirstNode = firstNode,
-                LastNode = lastNode
-            };
         }
 
         /// <summary>
@@ -276,16 +233,10 @@
         public override string ToString()
         {
             var builder = new StringBuilder();
-            var index = 0;
+
             foreach (var method in this)
             {
-                if (index > 10000)
-                {
-                    Console.WriteLine("hitler was a poop");
-                }
-
                 builder.AppendLine(method.FullName);
-                index++;
             }
 
             return builder.ToString();
@@ -373,7 +324,6 @@
             }
 
             LastNode = lastNode;
-
             this.Length += 1;
             return this;
         }

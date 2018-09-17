@@ -3,8 +3,6 @@ using CodePathFinder.CodeAnalysis.PathFinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Telerik.JustMock;
 using Xunit;
 
@@ -236,6 +234,64 @@ namespace CodePathFinder.Test.CodeAnalysis.PathFinding
                 index++;
             }
         }
+
+        [Theory]
+        [InlineData(
+            new string[] { "Method1", "Method2", "Method3", "Method4", "Method5" },
+            new string[] { "noman", "goman", "yoman", "soman" })]
+        public void ConcatNew_ConcatPartial_ShouldConcatFullChain(params string[][] parms)
+        {
+            // arrange
+            var extraPath = new CodePath();
+            var sut = new CodePath();
+            foreach (var name in parms[0])
+            {
+                var mockedMethod = Mock.Create<Method>();
+                Mock.Arrange(() => mockedMethod.FullName).Returns(name);
+                sut.AddLast(mockedMethod);
+            }
+
+            foreach (var name in parms[1])
+            {
+                var mockedMethod = Mock.Create<Method>();
+                Mock.Arrange(() => mockedMethod.FullName).Returns(name);
+                extraPath.AddLast(mockedMethod);
+            }
+
+            // form expected final path
+            var expected = parms[0].Concat(parms[1].Skip(2));
+
+            // act
+            var newSut = sut.ConcatNew(extraPath.GetSubPaths().ToList()[1]);
+
+            // assert
+            Assert.Equal(parms[0].Length + parms[1].Length - 2, newSut.Count());
+            Assert.Equal(parms[0].Length + parms[1].Length - 2, newSut.Length);
+            Assert.Equal(expected, newSut.Select(x => x.FullName));
+        }
+
+        // NOTE: Currently CodePath doesn't support any repeated elements
+        //[Theory]
+        //[InlineData("Method1", "Method2", "Method3", "Method4", "Method5")]
+        //public void ConcatNew_ConcatSelf_HasCorrectProperties(params string[] parms)
+        //{
+        //    // arrange
+        //    var sut = new CodePath();
+        //    foreach (var name in parms)
+        //    {
+        //        var mockedMethod = Mock.Create<Method>();
+        //        Mock.Arrange(() => mockedMethod.FullName).Returns(name);
+        //        sut.AddLast(mockedMethod);
+        //    }
+
+        //    // act
+        //    var actual = sut.ConcatNew(sut.GetSubPaths().ToList()[1]);
+
+        //    // assert
+        //    var actualCount = actual.Count();
+        //    Assert.Equal(parms.Length * 2 - 2, actualCount);
+        //    Assert.Equal(parms.Length * 2 - 2, actual.Length);
+        //}
 
         [Theory]
         [InlineData("Method1", "Method2", "Method3", "Method4", "Method5")]
