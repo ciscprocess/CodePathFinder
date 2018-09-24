@@ -1,6 +1,6 @@
 ﻿namespace CodePathFinder.CodeAnalysis.PathFinding
 {
-    using System;
+    using CodePathFinder.CodeAnalysis.Logging;
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
@@ -95,7 +95,7 @@
         /// <param name="end">goal method</param>
         /// <param name="maxPathLength">the upper limit of path size; exclude paths longer than this</param>
         /// <returns>enumerator/generator for paths</returns>
-        private IEnumerable<CodePath> ConstructFullPaths(Method start, 
+        public IEnumerable<CodePath> ConstructFullPaths(Method start, 
             Method end, 
             CancellationToken token, 
             int maxPathLength = -1)
@@ -105,6 +105,7 @@
             {
                 if (token.IsCancellationRequested)
                 {
+                    token.ThrowIfCancellationRequested();
                     yield break;
                 }
 
@@ -143,7 +144,7 @@
         /// <param name="end">ending method</param>
         /// <param name="cancellationToken">cancellation token</param>
         /// <returns>void Task</returns>
-        private async Task ConstructPartialPaths(Method start, 
+        public async Task ConstructPartialPaths(Method start, 
             Method end,
             CancellationToken cancellationToken)
         {
@@ -195,8 +196,11 @@
 
                     if (cancellationToken.IsCancellationRequested)
                     {
-                        Console.WriteLine("Thread with ID: {0} has had its operation cancelled. Terminating.",
+                        AppLogger.Current.Debug(
+                            "Thread with ID: {0} has had its operation cancelled. Terminating.",
                             threadId);
+
+                        cancellationToken.ThrowIfCancellationRequested();
 
                         return;
                     }
@@ -212,7 +216,9 @@
                 Thread.Sleep(50);
             }
 
-            Console.WriteLine("Terminating thread with ID: {0}", threadId);
+            AppLogger.Current.Debug(
+                "Terminating thread with ID: {0}", 
+                threadId);
         }
 
         /// <summary>
@@ -229,6 +235,7 @@
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     return;
                 }
 

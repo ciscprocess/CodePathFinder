@@ -50,7 +50,7 @@
         }
 
         /// <summary>
-        /// Gets teh base type for a given class
+        /// Gets the base type for a given class
         /// </summary>
         /// <param name="def">the base type</param>
         /// <returns>the base type</returns>
@@ -65,8 +65,7 @@
                 return null;
             }
 
-            TypeDefinition gotType = null;
-            if (baseTypeMap.TryGetValue(fn, out gotType))
+            if (baseTypeMap.TryGetValue(fn, out TypeDefinition gotType))
             {
                 return gotType;
             }

@@ -67,6 +67,9 @@
     <Compile Include="CodeAnalysis\AssemblyTree\IAssemblyTreeLoader.cs" />
     <Compile Include="CodeAnalysis\IAssemblyGraphAnalyzer.cs" />
     <Compile Include="CodeAnalysis\IAssemblyLoader.cs" />
+    <Compile Include="CodeAnalysis\Logging\AppLogger.cs" />
+    <Compile Include="CodeAnalysis\Logging\ICodePathLogger.cs" />
+    <Compile Include="CodeAnalysis\Logging\NullLogger.cs" />
     <Compile Include="CodeAnalysis\PathFinding\DepthFirstCodePathFinder.cs" />
     <Compile Include="CodeAnalysis\PathFinding\ICodePathFinder.cs" />
     <Compile Include="CodeAnalysis\PathFinding\CodePath.cs" />

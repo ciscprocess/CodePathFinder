@@ -2,6 +2,8 @@
 {
     using CodeAnalysis;
     using CodeAnalysis.PathFinding;
+    using CodePathFinder.CodeAnalysis.Logging;
+    using CodePathFinder.ConsoleUtility.Logging;
     using MonoCecilImpl;
     using MonoCecilImpl.CodeAnalysis;
     using MonoCecilImpl.Utility;
@@ -25,11 +27,18 @@
         /// <summary>
         /// Default "include" options when loading assemblies
         /// </summary>
-        private static readonly AssemblyMetadataOption[] options = new AssemblyMetadataOption[1]
+        private static readonly AssemblyMetadataOption[] options = new AssemblyMetadataOption[2]
             {
                 new AssemblyMetadataOption()
                 {
                     AttributeType = AssemblyMetadataOption.AssemblyMetadataAttribute.ProductName,
+                    Exclude = false,
+                    IsRegex = true,
+                    Value = ".*airwatch.*"
+                },
+                new AssemblyMetadataOption()
+                {
+                    AttributeType = AssemblyMetadataOption.AssemblyMetadataAttribute.LegalCopyright,
                     Exclude = false,
                     IsRegex = true,
                     Value = ".*airwatch.*"
@@ -41,6 +50,8 @@
         /// </summary>
         static void Main(string[] args)
         {
+            AppLogger.RegisterLogger(new ConsoleLogger());
+
             var assemblyLoader = new MonoCecilAssemblyLoader(DefaultAsmPath);
             var assemblies = assemblyLoader.LoadDomainAssemblies(options);
 

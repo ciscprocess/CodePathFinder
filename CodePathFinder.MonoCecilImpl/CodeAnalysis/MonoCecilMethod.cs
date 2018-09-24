@@ -14,7 +14,7 @@
         /// <summary>
         /// Regex used to format the method for ToString()
         /// </summary>
-        private static Regex AbbreviationRegex = new Regex(@".*\.([A-Za-z_]\w*)::([A-Za-z_]\w*)\(");
+        private static Regex AbbreviationRegex = new Regex(@".*\.([A-Za-z_`$]*\w*)::([A-Za-z_`$]*\w*)\(", RegexOptions.Compiled);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MonoCecilMethod" /> class
@@ -22,12 +22,8 @@
         /// <param name="ilDefinition"></param>
         public MonoCecilMethod(MethodDefinition ilDefinition)
         {
-            if (ilDefinition == null)
-            {
+            this.IlDefinition = ilDefinition ?? 
                 throw new ArgumentNullException(nameof(ilDefinition));
-            }
-
-            this.IlDefinition = ilDefinition;
         }
 
         /// <summary>
@@ -37,13 +33,7 @@
         /// + Method Name
         /// + Return type
         /// </summary>
-        public override string FullName
-        {
-            get
-            {
-                return this.IlDefinition.FullName;
-            }
-        }
+        public override string FullName => this.IlDefinition.FullName;
 
         /// <summary>
         /// The IL definition for this Method

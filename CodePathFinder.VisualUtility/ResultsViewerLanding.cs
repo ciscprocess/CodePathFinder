@@ -3,12 +3,8 @@ using CodePathFinder.CodeAnalysis.PathFinding;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace CodePathFinder.VisualUtility
@@ -17,85 +13,70 @@ namespace CodePathFinder.VisualUtility
     {
         private Method start;
         private Method end;
-        private IList<CodePath> unfiltered;
         private IList<CodePath> filtered;
+        private ResultTreeNode resultTreeRoot = null;
+
 
         public ResultsViewerLanding(IList<CodePath> results, Method start, Method end)
         {
             InitializeComponent();
             this.start = start;
             this.end = end;
-            this.unfiltered = results;
             this.filtered = results;
 
-            RenderTree();
-            ResetCursor(this.Controls);
+            ConstructResultTree();
+            RenderTreeDynamic();
+
             this.UseWaitCursor = false;
+
+            this.treeView1.BeforeExpand += TreeView1_BeforeExpand;
         }
 
-        void ResetCursor(IEnumerable theControls)
+        private void TreeView1_BeforeExpand(object sender, TreeViewCancelEventArgs e)
         {
-            foreach (Control control in theControls)
+            var treeNode = e.Node;
+            var abstractNode = (ResultTreeNode)treeNode.Tag;
+            if (treeNode.Nodes.Count == 1 && treeNode.Nodes[0].Text == "<loading>")
             {
-                if (control.HasChildren)
+                treeNode.Nodes.Clear();
+
+                foreach (var childAbsNode in  abstractNode.Children)
                 {
-                    ResetCursor(control.Controls);
+                    var childNode = treeNode.Nodes.Add(childAbsNode.Method.ToString());
+                    childNode.Tag = childAbsNode;
+                    childNode.Nodes.Add("<loading>");
                 }
-                else
-                    control.Cursor = Cursors.Arrow;
             }
         }
 
-        private void RenderTree()
+        private void ConstructResultTree()
         {
-            this.treeView1.Nodes.Clear();
-            this.treeView1.Nodes.Add(start.ToString());
-
+            this.resultTreeRoot = new ResultTreeNode(this.start);
             foreach (var path in this.filtered)
             {
-                TreeNode last = null;
+                ResultTreeNode last = this.resultTreeRoot;
                 foreach (var node in path)
                 {
-                    if (last == null)
+                    ResultTreeNode found;
+                    if ((found = last.Children.FirstOrDefault(x => x.Method == node)) != null)
                     {
-                        last = this.treeView1.Nodes.Cast<TreeNode>().First(x => x.Text == node.ToString());
+                        last = found;
                     }
                     else
                     {
-                        TreeNode found;
-                        if ((found = last.Nodes.Cast<TreeNode>().FirstOrDefault(x => x.Text == node.ToString())) != null)
-                        {
-                            last = found;
-                        }
-                        else
-                        {
-                            last = last.Nodes.Add(node.ToString());
-                        }
+                        var treeNode = new ResultTreeNode(node);
+                        last.Children.Add(treeNode);
+                        last = treeNode;
                     }
                 }
             }
         }
 
-        private void checkLimitResultPath_CheckedChanged(object sender, EventArgs e)
+        private void RenderTreeDynamic()
         {
-            if (this.checkLimitResultPath.Checked)
-            {
-                this.numPathLength.Enabled = true;
-                this.filtered = this.unfiltered.Where(x => x.Count() < this.numPathLength.Value).ToList();
-                RenderTree();
-            }
-            else
-            {
-                this.numPathLength.Enabled = false;
-                this.filtered = this.unfiltered.ToList();
-                RenderTree();
-            }
-        }
-
-        private void numPathLength_ValueChanged(object sender, EventArgs e)
-        {
-            this.filtered = this.unfiltered.Where(x => x.Count() < this.numPathLength.Value).ToList();
-            this.RenderTree();
+            var rootNode = this.treeView1.Nodes.Add(this.resultTreeRoot.Method.ToString());
+            rootNode.Tag = this.resultTreeRoot;
+            rootNode.Nodes.Add("<loading>");
         }
 
         private void buttonShowGraph_Click(object sender, EventArgs e)

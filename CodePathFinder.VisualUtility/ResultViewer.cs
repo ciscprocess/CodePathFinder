@@ -19,6 +19,7 @@ namespace CodePathFinder.VisualUtility
 
             var viewer = new GViewer();
             var graph = new Graph();
+            var counter = 0;
 
             foreach (var path in this.results)
             {
@@ -29,6 +30,7 @@ namespace CodePathFinder.VisualUtility
                     {
                         var prevName = previous.ToString();
                         var nextName = node.ToString();
+
                         if (!graph.Edges.Any(x => x.Source == prevName && x.Target == nextName))
                         {
                             graph.AddEdge(prevName, nextName);

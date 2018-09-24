@@ -1,11 +1,8 @@
 ﻿using CodePathFinder.CodeAnalysis;
 using CodePathFinder.CodeAnalysis.AssemblyTree;
 using Mono.Cecil;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodePathFinder.MonoCecilImpl.CodeAnalysis.AssemblyTree
 {
@@ -14,6 +11,7 @@ namespace CodePathFinder.MonoCecilImpl.CodeAnalysis.AssemblyTree
         private readonly IAssemblyLoader<AssemblyDefinition, MonoCecilMethod> assemblyLoader;
         private readonly AssemblyMetadataOption[] options;
         private readonly IList<string> namespaceCache;
+        private ISet<AssemblyDefinition> assemblies = null;
 
         public MonoCecilAssemblyTreeLoader(
             IAssemblyLoader<AssemblyDefinition, MonoCecilMethod> assemblyLoader,
@@ -22,6 +20,35 @@ namespace CodePathFinder.MonoCecilImpl.CodeAnalysis.AssemblyTree
             this.assemblyLoader = assemblyLoader;
             this.options = options;
             this.namespaceCache = new List<string>();
+        }
+
+        public IEnumerable<IList<AsmTreeNode>> FindPathToMethod(string methodNameContains)
+        {
+            if (this.assemblies == null)
+            {
+                this.assemblies = this.assemblyLoader.LoadDomainAssemblies(options);
+            }
+
+            foreach (var asm in this.assemblies)
+            {
+                foreach (var type in asm.MainModule.Types)
+                {
+                    foreach (var method in type.Methods)
+                    {
+                        if (method.FullName.ToLower().Contains(methodNameContains.ToLower()))
+                        {
+                            var wrapped = new MonoCecilMethod(method);
+                            yield return new List<AsmTreeNode>
+                            {
+                                new AsmTreeNode(this, asm) { FullName = asm.MainModule.Name, NodeType = AssemblyTreeNodeType.Assembly },
+                                new AsmTreeNode(this, asm) { FullName = type.Namespace, NodeType = AssemblyTreeNodeType.Namespace },
+                                new AsmTreeNode(this, type) { FullName = type.FullName, NodeType = AssemblyTreeNodeType.Type },
+                                new AsmTreeNode(this, wrapped) { FullName = wrapped.ToString(), NodeType = AssemblyTreeNodeType.Method }
+                            };
+                        }
+                    }
+                }
+            }
         }
 
         public IEnumerable<AsmTreeNode> LoadNodeChildrenInteractive(AsmTreeNode node)
@@ -92,7 +119,11 @@ namespace CodePathFinder.MonoCecilImpl.CodeAnalysis.AssemblyTree
 
         public IList<AsmTreeNode> LoadRootNodes()
         {
-            var assemblies = this.assemblyLoader.LoadDomainAssemblies(options);
+            if (this.assemblies == null)
+            {
+                this.assemblies = this.assemblyLoader.LoadDomainAssemblies(options);
+            }
+            
             var list = new List<AsmTreeNode>();
 
             foreach (var assembly in assemblies)

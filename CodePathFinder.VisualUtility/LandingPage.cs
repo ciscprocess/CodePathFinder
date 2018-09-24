@@ -73,6 +73,18 @@ namespace CodePathFinder.VisualUtility
 
         private void ButtonFindPaths_Click(object sender, EventArgs e)
         {
+            if (this.start == null || 
+                this.end == null ||
+                string.IsNullOrWhiteSpace(this.textAsmLocation.Text))
+            {
+                MessageBox.Show("Please select both a starting and ending method!", 
+                    "Error!", 
+                    MessageBoxButtons.OK, 
+                    MessageBoxIcon.Error);
+
+                return;
+            }
+
             var finder = new StartSearchPage(this.textAsmLocation.Text, options, start, end);
             finder.ShowDialog();
         }

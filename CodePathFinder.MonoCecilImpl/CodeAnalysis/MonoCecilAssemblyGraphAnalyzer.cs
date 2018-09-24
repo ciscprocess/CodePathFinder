@@ -2,6 +2,7 @@
 {
     using CodeAnalysis;
     using CodePathFinder.CodeAnalysis;
+    using CodePathFinder.CodeAnalysis.Logging;
     using Mono.Cecil;
     using Mono.Cecil.Cil;
     using System;
@@ -67,7 +68,7 @@
             for (int i = 0; i < this.assemblies.Count; i++)
             {
                 var index = i % partitionFactor;
-                this.splitAssemblies[index].Add(this.assemblies.ElementAt(i));
+                this.splitAssemblies[index].Add(assemblyList[i]);
             }
 
             this.typeImplementationCache = new ConcurrentDictionary<string, List<TypeDefinition>>();
@@ -113,47 +114,40 @@
 
                 if (!found)
                 {
-                    Console.WriteLine("Warning: No implementation found for: \n\t\"{0}\"", method.FullName);
+                    AppLogger.Current.Warning("No implementation found for: {0}",
+                        method.FullName);
                 }
 
                 return allMethods;
             }
 
-            var calls = new List<Method>();
-            if (ilDefinition == null || ilDefinition.Body == null)
-            {
-                return calls;
-            }
-
+            var calls = new ConcurrentBag<Method>();
             Parallel.ForEach(ilDefinition.Body.Instructions,
                 (instruction, state, index) => 
                 {
-                    try
+                    if (instruction.OpCode == OpCodes.Call ||
+                        instruction.OpCode == OpCodes.Callvirt ||
+                        instruction.OpCode == OpCodes.Calli)
                     {
-                        if (instruction.OpCode == OpCodes.Call ||
-                            instruction.OpCode == OpCodes.Callvirt ||
-                            instruction.OpCode == OpCodes.Calli)
+                        var reference = ResolveMethodReference(instruction.Operand);
+                        var inWorkingAssembly = 
+                            this.assemblyNameCache.Contains(reference?.Module.Assembly.FullName);
+
+                        if (inWorkingAssembly)
                         {
-                            var reference = ResolveMethodReference(instruction.Operand);
-
-                            if (reference != null &&
-                                this.assemblyNameCache.Contains(reference.Module.Assembly.FullName))
-                            {
-                                lock (calls)
-                                {
-                                    calls.Add(new MonoCecilMethod(reference));
-                                }
-                            }
+                            calls.Add(new MonoCecilMethod(reference));
                         }
+                        //else if (reference != null && !inWorkingAssembly)
+                        //{
+                        //    AppLogger.Current.Warning(
+                        //        "Unable to explore method '{0}' because its assembly '{1}' is not loaded. Consider adding it to your filters.",
+                        //        reference.FullName,
+                        //        reference.Module.Assembly.FullName);
+                        //}
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("wowww.... {0}", ex.ToString());
-                    }
-
                 });
 
-            return calls;
+            return calls.ToList();
         }
 
         /// <summary>
@@ -171,8 +165,7 @@
                 yield break;
             }
 
-            List<TypeDefinition> allTypes;
-            if (!typeImplementationCache.TryGetValue(absType.FullName, out allTypes))
+            if (!typeImplementationCache.TryGetValue(absType.FullName, out List<TypeDefinition> allTypes))
             {
                 allTypes = new List<TypeDefinition>();
 
@@ -238,9 +231,14 @@
                 {
                     return (reference as MethodReference).Resolve();
                 }
-                catch (Exception ex)
+                // it seems that Mono.Cecil has some issues with error handling
+                catch (NullReferenceException ex)
                 {
-                    Console.WriteLine("Reference Error: {1}\n {0}", ex.ToString(), ((MethodReference)reference).FullName);
+                    AppLogger.Current.Error(ex, 
+                        "Could not load reference for: {0}", 
+                        ((MethodReference)reference).FullName);
+
+                    return null;
                 }
             }
             else if (reference is MethodDefinition)
